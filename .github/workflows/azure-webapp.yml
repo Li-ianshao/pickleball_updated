@@ -2,12 +2,15 @@ name: Deploy Django to Azure Web App
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
+    # 讓所有 run 預設在子資料夾執行（你的 manage.py 在這裡）
+    defaults:
+      run:
+        working-directory: pickleball_updated
 
     steps:
       - name: Checkout source
@@ -16,7 +19,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'   # 跟你 Azure 設的 runtime 一致
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
@@ -26,12 +29,29 @@ jobs:
       - name: Run migrations
         run: python manage.py migrate --noinput
 
+      # 打包成 zip（放到 repo 根目錄，方便下一個 job 下載）
       - name: Zip artifact
-        run: zip -r app.zip . -x "*.git*"
+        run: |
+          zip -r ../app.zip . -x "*.git*"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app
+          path: app.zip
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: "<your-app-name>"   # 例如 pickleball-updated
+          app-name: "pickleball-static-updated"   # ← 若你的 App Service 名稱不同，改這裡
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: app.zip
